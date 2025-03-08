@@ -5,3 +5,6 @@ langchain_openai
 python-dotenv
 sentence-transformers
 faiss-cpu
+groq
+langchainhub
+langchain_groq 
