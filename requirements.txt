@@ -1,0 +1,7 @@
+arxiv
+langchain_community
+wikipedia
+langchain_openai
+python-dotenv
+sentence-transformers
+faiss-cpu
