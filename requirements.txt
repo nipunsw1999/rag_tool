@@ -9,3 +9,4 @@ groq
 langchainhub
 langchain_groq 
 streamlit
+langchain-google-genai
