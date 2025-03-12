@@ -18,7 +18,7 @@ from langchain_community.utilities import ArxivAPIWrapper
 from langchain_community.tools import ArxivQueryRun
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-st.write("This is an Agentic RAG application powered by Wikipedia, ArXiv, Google Scholar, and custom-added websites for enhanced information retrieval.")
+st.write("This is an Agentic RAG application powered by Wikipedia, ArXiv, Google Scholar, and custom-added websites for enhanced information retrieval. Updateding in progress")
 
 # Initialize session state variables
 if "base_model" not in st.session_state:
