@@ -10,3 +10,4 @@ langchainhub
 langchain_groq 
 streamlit
 langchain-google-genai
+langchain-google-community
