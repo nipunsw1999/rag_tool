@@ -1,117 +1,140 @@
-import streamlit as st
-from tools import arxiv, wiki_tool, llm
-from langchain import hub
-from langchain.agents import create_openai_tools_agent
-from langchain.agents import AgentExecutor
+from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_community.tools import WikipediaQueryRun
+from langchain_community.utilities import WikipediaAPIWrapper
+
 from dotenv import load_dotenv
 import os
+from langchain.memory import ConversationBufferMemory
 from langchain_community.document_loaders import WebBaseLoader
 from langchain_community.vectorstores import  FAISS
 from langchain_openai import OpenAIEmbeddings
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain.embeddings import HuggingFaceEmbeddings
-from langchain_community.tools import WikipediaQueryRun
-from langchain_community.utilities import WikipediaAPIWrapper
-from langchain.tools.retriever import create_retriever_tool 
-import streamlit as st 
+
+
+# Arxiv Tool
 from langchain_community.utilities import ArxivAPIWrapper
 from langchain_community.tools import ArxivQueryRun
-from langchain_google_genai import ChatGoogleGenerativeAI
+import streamlit as st
 
-st.write("This is an Agentic RAG application powered by Wikipedia, ArXiv, Google Scholar, and custom-added websites for enhanced information retrieval. Updateding in progress")
+st.set_page_config(page_title="Chat with Me", page_icon="💬")
 
-# Initialize session state variables
-if "base_model" not in st.session_state:
-    st.session_state.base_model = "gemma2-9b-it"
+st.title("💬 Chat with Me")
 
-if "tools" not in st.session_state:
-    st.session_state.tools = []
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
 if "url" not in st.session_state:
     st.session_state.url = ""
+    
+if "dec" not in st.session_state:
+    st.session_state.dec = ""
 
-if st.session_state.url != "":
-    loader = WebBaseLoader(st.session_state.url)
+with st.sidebar:
+    web_URL = st.text_input("Enter URL")
+    desc_URL = st.text_input("Describe URL")
+    submit_button = st.button("Try this URL")
+    if submit_button:
+        if web_URL=="":
+            st.error("Please enter a web URL or URL is none specified")
+        st.session_state.url  = web_URL
+        st.session_state.dec  = desc_URL
+        st.success("Done!")
+
+
+
+memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+
+
+
+load_dotenv()
+
+os.environ["OPENAI_API_KEY"] = os.getenv("OPENAI_API_KEY")
+os.environ["HUGGINGFACEHUB_API_TOKEN"] = os.getenv("HUGGINGFACEHUB_API_TOKEN")
+os.environ["GOOGLE_API_KEY"] = os.getenv("GOOGLE_API_KEY")
+
+
+api_wrapper = WikipediaAPIWrapper(top_k_results=1,doc_content_chars_max=200)
+wiki_tool = WikipediaQueryRun(api_wrapper=api_wrapper)
+
+
+arxiv_wrapper = ArxivAPIWrapper(top_k_results=1,doc_content_chars_max=200)
+arxiv=ArxivQueryRun(api_wrapper=arxiv_wrapper)
+
+
+
+if st.session_state.url !="": 
+    st.write(str(st.session_state.url))
+    loader = WebBaseLoader(str(st.session_state.url))
     docs=loader.load()
     documents = RecursiveCharacterTextSplitter(chunk_size=1000,chunk_overlap=200).split_documents(docs)
     embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     vectorDB = FAISS.from_documents(documents, embeddings) 
     retriever = vectorDB.as_retriever()
+
+    from langchain.tools.retriever import create_retriever_tool 
+
     retriever_tool = create_retriever_tool(
-    retriever,
-    "url_search",
-    "",
+        retriever,
+        "webURl",
+        st.session_state.dec,
     )
 
 
-if "chat_history" not in st.session_state:
-    st.session_state.chat_history = []
 
-# Sidebar Customization
-with st.sidebar:
-    st.title("Agentic RAG")
-    st.markdown("Customization")
 
-    with st.form(key="model_form"):
-        model = st.selectbox("Select a model", ["llama-3.3-70b-versatile", "llama3-70b-8192", "gemini-2.0-flash", "gemma2-9b-it"])
-        set_model = st.form_submit_button("Change model")
-        if set_model:
-            st.session_state.base_model = model
-            st.success("Model updated")
 
-        wiki = st.toggle("Wikipedia")
-        arx = st.toggle("ArXiv")
-        scholar = st.toggle("Google Scholar")
 
-        link1 = st.text_input("Enter the URL: ")
-        add_link = st.form_submit_button("Add Link")
-        if add_link and link1!="":
-            st.session_state.url = link1
-            st.success("Link added")
+if st.session_state.url != "":
+    tools = [wiki_tool,arxiv,retriever_tool]
+else:
+    tools = [wiki_tool,arxiv]
 
-        clear_chat = st.form_submit_button("Clear Chat")
-        if clear_chat:
-            st.session_state.chat_history = []
-            st.success("Chat history cleared")
 
-# Manage tools dynamically
-st.session_state.tools = []
-if wiki:
-    st.session_state.tools.append(wiki_tool)
-if arx:
-    st.session_state.tools.append(arxiv)
-if scholar:
-    from tools import google_scholar_tool  # Import only if needed
-    st.session_state.tools.append(google_scholar_tool)
-if st.session_state.url:
-    from tools import retriever_tool
-    st.session_state.tools.append(retriever_tool)
+llm = ChatGoogleGenerativeAI(model="gemini-2.0-flash", temperature=1)
 
-# Display chat history
-for message in st.session_state.chat_history:
-    with st.chat_message(message["role"]):
-        st.write(message["content"])
+from langchain import hub
 
-# Load the prompt for the agent
 prompt = hub.pull("hwchase17/openai-functions-agent")
 
-# Create the agent
-agent = create_openai_tools_agent(llm, st.session_state.tools, prompt)
-agent_executor = AgentExecutor(agent=agent, tools=st.session_state.tools, verbose=False)
 
-# User input handling
-user_input = st.chat_input("Ask anything...")
+# Agents
 
-if user_input:
-    st.session_state.chat_history.append({"role": "user", "content": user_input})
-    
+from langchain.agents import create_openai_tools_agent
+
+agent = create_openai_tools_agent(llm,tools,prompt)
+
+
+## Agent Executer
+
+from langchain.agents import AgentExecutor
+
+agent_executer = AgentExecutor(agent=agent, tools=tools, memory=memory, verbose=True)
+
+
+# agent_executer.invoke({"input":"Tell me about few names of university of jaffna computer science students Academic Year: 2019/2020"})
+
+
+
+
+
+
+
+for msg in st.session_state.messages:
+    with st.chat_message(msg["role"]):
+        st.markdown(msg["content"])
+
+if user_prompt := st.chat_input("Type your message..."):
+    st.session_state.messages.append({"role": "user", "content": user_prompt})
+
     with st.chat_message("user"):
-        st.write(user_input)
+        st.markdown(user_prompt)
 
-    response = agent_executor.invoke({"input": user_input})["output"]  # Extract response correctly
-    
-    st.session_state.chat_history.append({"role": "assistant", "content": response})
-    
+    response = agent_executer.invoke({"input": user_prompt})
+    bot_response = response["output"]
+
     with st.chat_message("assistant"):
-        st.write(response)
+        st.markdown(bot_response)
+
+    st.session_state.messages.append({"role": "assistant", "content": bot_response})
 
